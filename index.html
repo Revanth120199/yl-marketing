@@ -215,6 +215,9 @@ function YogurtlandLogo({ size = 32 }) {
         height: size,
         objectFit: 'contain',
         flexShrink: 0,
+        background: 'transparent',
+        mixBlendMode: 'multiply',
+        display: 'block',
       }}
     />
   );
@@ -303,9 +306,11 @@ function Field({ label, value, onChange, type = 'text', placeholder, icon, error
 
 // ─── ReasonPicker ─────────────────────────────────────────────────────
 const REASONS = ['Routine audit', 'Training', 'Issue follow-up', 'Grand opening', 'Menu rollout', 'Compliance check'];
+const OTHER_REASON = 'Other';
 
 function ReasonPicker({ value, onChange, error }) {
   const [open, setOpen] = React.useState(false);
+  const isCustomReason = !!value && !REASONS.includes(value);
   return (
     <div style={{ marginBottom: 16, position: 'relative' }}>
       <div style={{ fontSize: 12, fontWeight: 800, color: T.soft, letterSpacing: 0.4, textTransform: 'uppercase', marginBottom: 5 }}>Reason for visit</div>
@@ -330,26 +335,36 @@ function ReasonPicker({ value, onChange, error }) {
           background: T.white, borderRadius: 10, overflow: 'hidden',
           boxShadow: '0 8px 24px rgba(42,27,61,0.12), 0 0 0 1px rgba(42,27,61,0.08)',
         }}>
-          {REASONS.map(r => (
+          {[...REASONS, OTHER_REASON].map(r => (
             <button key={r} type="button" onClick={() => { onChange(r); setOpen(false); }} style={{
               width: '100%', padding: '9px 12px', border: 'none', textAlign: 'left',
-              background: r === value ? `${T.grape}08` : 'transparent',
+              background: (r === value || (r === OTHER_REASON && isCustomReason)) ? `${T.grape}08` : 'transparent',
               fontFamily: 'inherit', fontSize: 13, fontWeight: 600,
-              color: r === value ? T.grape : T.ink,
+              color: (r === value || (r === OTHER_REASON && isCustomReason)) ? T.grape : T.ink,
               cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
               borderBottom: `1px solid ${T.line}`,
             }}
-              onMouseEnter={e => { if (r !== value) e.currentTarget.style.background = '#F5F3F9'; }}
-              onMouseLeave={e => { if (r !== value) e.currentTarget.style.background = 'transparent'; }}
+              onMouseEnter={e => { if (!(r === value || (r === OTHER_REASON && isCustomReason))) e.currentTarget.style.background = '#F5F3F9'; }}
+              onMouseLeave={e => { if (!(r === value || (r === OTHER_REASON && isCustomReason))) e.currentTarget.style.background = 'transparent'; }}
             >
               {r}
-              {r === value && (
+              {(r === value || (r === OTHER_REASON && isCustomReason)) && (
                 <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke={T.grape} strokeWidth="2.2" strokeLinecap="round">
                   <path d="M2.5 7l3.5 3.5 5.5-7"/>
                 </svg>
               )}
             </button>
           ))}
+        </div>
+      )}
+      {(value === OTHER_REASON || isCustomReason) && (
+        <div style={{ marginTop: 10 }}>
+          <Field
+            label="Other reason"
+            value={isCustomReason ? value : ''}
+            onChange={onChange}
+            placeholder="Type the reason for this visit"
+          />
         </div>
       )}
       {error && <p style={{ fontSize: 11, fontWeight: 700, color: T.error, marginTop: 4 }}>{error}</p>}
@@ -641,7 +656,7 @@ function VisitFormScreen({ user, token, storeOptions, onSubmit, onGoToForm, onHi
     if (!store.trim()) e.store = 'Required';
     if (!date) e.date = 'Required';
     if (!start) e.start = 'Required';
-    if (!reason) e.reason = 'Required';
+    if (!reason || reason === OTHER_REASON) e.reason = 'Enter a reason';
     if (gpsState.status === 'idle' || gpsState.status === 'checking' || gpsState.status === 'locating') e.gps = 'Capture location before submitting';
     if (gpsState.status === 'blocked' || gpsState.status === 'error') e.gps = 'Location access is required to log a visit';
     return e;
