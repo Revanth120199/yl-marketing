@@ -1,0 +1,1224 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>YL MARKETING · FBC Check-In</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      min-height: 100%;
+      background:
+        radial-gradient(circle at top left, rgba(255, 138, 180, 0.28), transparent 28%),
+        radial-gradient(circle at top right, rgba(121, 193, 67, 0.22), transparent 24%),
+        linear-gradient(180deg, #FFF7FB 0%, #FFFDF7 38%, #F7FBF2 100%);
+      font-family: 'Nunito', ui-rounded, -apple-system, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      color: #2A1B3D;
+    }
+    #root { min-height: 100vh; }
+    input[type="time"]::-webkit-calendar-picker-indicator { opacity: 0.4; cursor: pointer; }
+    input { -webkit-appearance: none; }
+    button { font-family: inherit; cursor: pointer; }
+    textarea { font-family: inherit; }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(42,27,61,0.15); border-radius: 3px; }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin></script>
+
+<script type="text/babel">
+// ─── API config ───────────────────────────────────────────────────────
+const API_BASE = '';
+
+// ─── Token storage ────────────────────────────────────────────────────
+const Auth = {
+  getToken: ()  => sessionStorage.getItem('fbc_token'),
+  setToken: (t) => sessionStorage.setItem('fbc_token', t),
+  clear:    ()  => { sessionStorage.removeItem('fbc_token'); sessionStorage.removeItem('fbc_user'); },
+  getUser:  ()  => { try { return JSON.parse(sessionStorage.getItem('fbc_user')); } catch { return null; } },
+  setUser:  (u) => sessionStorage.setItem('fbc_user', JSON.stringify(u)),
+};
+
+// ─── API helpers ──────────────────────────────────────────────────────
+async function apiFetch(method, path, body, token) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const res = await fetch(`${API_BASE}${path}`, {
+    method,
+    headers,
+    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw Object.assign(new Error(err.message || `HTTP ${res.status}`), { status: res.status });
+  }
+  return res.json();
+}
+
+async function loadStoreOptions() {
+  const response = await fetch('/store-options.json', { cache: 'no-store' });
+  if (!response.ok) {
+    throw new Error('Unable to load store options');
+  }
+  return response.json();
+}
+
+const api = {
+  login:      (email, password)    => apiFetch('POST', '/api/auth/login', { email, password }),
+  getVisits:  (token, filters = {}) => {
+    const params = new URLSearchParams();
+    if (filters.storeId) params.set('store_id', filters.storeId);
+    if (filters.visitDate) params.set('visit_date', filters.visitDate);
+    const suffix = params.toString() ? `?${params.toString()}` : '';
+    return apiFetch('GET',  `/api/visits${suffix}`, undefined, token);
+  },
+  postVisit:  (token, payload)     => apiFetch('POST', '/api/visits', payload, token),
+  patchVisit: (token, id, payload) => apiFetch('PATCH', `/api/visits/${id}`, payload, token),
+};
+
+// ─── GPS capture ──────────────────────────────────────────────────────
+async function getLocationPermissionState() {
+  if (!navigator.permissions?.query) return 'prompt';
+  try {
+    const result = await navigator.permissions.query({ name: 'geolocation' });
+    return result.state || 'prompt';
+  } catch {
+    return 'prompt';
+  }
+}
+
+function captureGps(timeoutMs = 8000) {
+  return new Promise((resolve) => {
+    if (!navigator.geolocation) {
+      resolve({ ok: false, reason: 'unsupported' });
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => resolve({
+        ok: true,
+        coords: {
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          accuracy: pos.coords.accuracy,
+        },
+      }),
+      (err) => {
+        const code = err?.code;
+        const reason =
+          code === 1 ? 'denied' :
+          code === 2 ? 'unavailable' :
+          code === 3 ? 'timeout' :
+          'error';
+        resolve({ ok: false, reason });
+      },
+      { enableHighAccuracy: true, timeout: timeoutMs, maximumAge: 60000 },
+    );
+  });
+}
+
+// ─── Demo data ────────────────────────────────────────────────────────
+const DEMO_VISITS = [
+  { id: 'v4', consultant_name: 'Revanth', store: '208', date: 'Apr 18', start: '09:00', end: '10:20', reason: 'Routine audit',   notes: 'Checked inventory and staff compliance.', status: 'done' },
+  { id: 'v3', consultant_name: 'Revanth', store: '305', date: 'Apr 17', start: '13:00', end: '14:15', reason: 'Grand opening',   notes: 'Everything went smoothly.',              status: 'done' },
+  { id: 'v2', consultant_name: 'Revanth', store: '191', date: 'Yesterday', start: '10:30', end: '11:50', reason: 'Issue follow-up', notes: 'Resolved freezer temp issue.',        status: 'done' },
+  { id: 'v1', consultant_name: 'Revanth', store: '214', date: 'Yesterday', start: '14:10', end: '15:45', reason: 'Training',     notes: 'Onboarded 2 new team members.',          status: 'done' },
+];
+
+// ─── Design tokens ────────────────────────────────────────────────────
+const T = {
+  pink:    '#F24D88',
+  grape:   '#9B1265',
+  teal:    '#79C143',
+  lime:    '#A7D84C',
+  sunny:   '#FFE27A',
+  white:   '#FFFFFF',
+  pageBg:  'linear-gradient(180deg, #FFF7FB 0%, #FFFDF7 38%, #F7FBF2 100%)',
+  ink:     '#2A1B3D',
+  soft:    '#6D5B86',
+  muted:   '#9B8FAD',
+  line:    'rgba(91,47,176,0.14)',
+  error:   'oklch(65% 0.22 20)',
+  success: 'oklch(60% 0.18 160)',
+};
+
+function formatTime(t) {
+  if (!t) return '—';
+  const [h, m] = t.split(':').map(Number);
+  return `${h % 12 || 12}:${String(m).padStart(2,'0')} ${h >= 12 ? 'PM' : 'AM'}`;
+}
+
+function todayValue() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function formatCoords(lat, lng) {
+  if (typeof lat !== 'number' || typeof lng !== 'number') return 'Unavailable';
+  return `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+}
+
+function mapsUrl(lat, lng) {
+  if (typeof lat !== 'number' || typeof lng !== 'number') return '#';
+  return `https://www.google.com/maps?q=${lat},${lng}`;
+}
+
+function normalizeVisit(v) {
+  return {
+    id: v.id,
+    consultantName: v.consultantName ?? v.consultant_name ?? v.name ?? '',
+    workMode: v.workMode ?? v.work_mode ?? 'store_visit',
+    store: v.store ?? v.store_id ?? '',
+    date: v.date ?? v.visit_date ?? todayValue(),
+    start: v.start ?? v.start_time ?? '',
+    end: v.end ?? v.end_time ?? '',
+    reason: v.reason ?? '',
+    notes: v.notes ?? '',
+    status: v.status ?? (v.end || v.end_time ? 'done' : 'active'),
+    lat: typeof v.lat === 'number' ? v.lat : v.gps_lat,
+    lng: typeof v.lng === 'number' ? v.lng : v.gps_lng,
+    accuracy: typeof v.accuracy === 'number' ? v.accuracy : v.gps_accuracy,
+    checkoutLat: typeof v.checkoutLat === 'number' ? v.checkoutLat : v.checkout_gps_lat,
+    checkoutLng: typeof v.checkoutLng === 'number' ? v.checkoutLng : v.checkout_gps_lng,
+    checkoutAccuracy: typeof v.checkoutAccuracy === 'number' ? v.checkoutAccuracy : v.checkout_gps_accuracy,
+  };
+}
+
+function workModeLabel(workMode) {
+  return workMode === 'work_from_home' ? 'Work From Home' : 'Store Visit';
+}
+
+function storeLabel(visit) {
+  return visit.workMode === 'work_from_home' ? 'WFH' : `#${visit.store}`;
+}
+
+// ─── YL logo ──────────────────────────────────────────────────────────
+function YogurtlandLogo({ size = 32 }) {
+  return (
+    <img
+      src="image copy 12.png"
+      alt="Yogurtland logo"
+      style={{
+        width: size * 3.8,
+        height: size,
+        objectFit: 'contain',
+        flexShrink: 0,
+      }}
+    />
+  );
+}
+
+// ─── Avatar ───────────────────────────────────────────────────────────
+function Avatar({ name, size = 32 }) {
+  const initials = name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+  return (
+    <div style={{
+      width: size, height: size, borderRadius: '50%', flexShrink: 0,
+      background: `linear-gradient(135deg, ${T.pink}, ${T.grape})`,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontSize: size * 0.38, fontWeight: 800, color: '#fff', letterSpacing: -0.5,
+    }}>{initials}</div>
+  );
+}
+
+// ─── Button ───────────────────────────────────────────────────────────
+function Btn({ children, variant = 'primary', onClick, disabled, type = 'button', style: sx = {} }) {
+  const base = {
+    primary: { bg: `linear-gradient(135deg, ${T.pink}, ${T.grape})`, fg: '#fff', shadow: `0 12px 24px -10px ${T.grape}75` },
+    teal:    { bg: `linear-gradient(135deg, ${T.teal}, ${T.lime})`,  fg: '#fff', shadow: `0 12px 24px -10px ${T.teal}70`  },
+    ghost:   { bg: 'rgba(255,255,255,0.7)', fg: T.soft, shadow: 'none', border: `1.5px solid ${T.line}` },
+  };
+  const v = base[variant] || base.primary;
+  return (
+    <button type={type} onClick={onClick} disabled={disabled} style={{
+      height: 40, padding: '0 18px', borderRadius: 8,
+      background: v.bg, color: v.fg, border: v.border || 'none',
+      fontWeight: 800, fontSize: 13, letterSpacing: -0.1,
+      cursor: disabled ? 'not-allowed' : 'pointer',
+      opacity: disabled ? 0.45 : 1,
+      boxShadow: disabled ? 'none' : v.shadow,
+      display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+      transition: 'opacity .15s, transform .1s',
+      whiteSpace: 'nowrap',
+      ...sx,
+    }}
+      onMouseDown={e => { if (!disabled) e.currentTarget.style.transform = 'scale(0.98)'; }}
+      onMouseUp={e => { e.currentTarget.style.transform = ''; }}
+      onMouseLeave={e => { e.currentTarget.style.transform = ''; }}
+    >{children}</button>
+  );
+}
+
+// ─── Form field ───────────────────────────────────────────────────────
+function Field({ label, value, onChange, type = 'text', placeholder, icon, error, hint, autoFocus, listOptions = [] }) {
+  const [focus, setFocus] = React.useState(false);
+  const id = React.useId();
+  const listId = listOptions.length ? `${id}-list` : undefined;
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <label htmlFor={id} style={{ display: 'block', fontSize: 12, fontWeight: 800, color: T.soft, letterSpacing: 0.4, textTransform: 'uppercase', marginBottom: 5, cursor: 'pointer' }}>
+        {label}
+      </label>
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 8,
+        background: T.white, borderRadius: 8, padding: '0 12px', height: 40,
+        border: `1.5px solid ${error ? T.error : focus ? T.grape : T.line}`,
+        boxShadow: focus ? `0 0 0 3px ${T.grape}18` : 'none',
+        transition: 'border-color .15s, box-shadow .15s',
+      }}>
+        {icon && <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', color: T.muted }}>{icon}</div>}
+        <input id={id}
+          value={value} onChange={e => onChange && onChange(e.target.value)}
+          onFocus={() => setFocus(true)} onBlur={() => setFocus(false)}
+          type={type} placeholder={placeholder} autoFocus={autoFocus} list={listId}
+          style={{
+            flex: 1, border: 'none', outline: 'none', background: 'transparent',
+            fontFamily: 'inherit', fontSize: 14, fontWeight: 600, color: T.ink,
+            minWidth: 0,
+          }}
+        />
+      </div>
+      {listId && (
+        <datalist id={listId}>
+          {listOptions.map((option) => <option key={option} value={option} />)}
+        </datalist>
+      )}
+      {error && <p style={{ fontSize: 11, fontWeight: 700, color: T.error, marginTop: 4 }}>{error}</p>}
+      {hint && !error && <p style={{ fontSize: 11, color: T.muted, marginTop: 4 }}>{hint}</p>}
+    </div>
+  );
+}
+
+// ─── ReasonPicker ─────────────────────────────────────────────────────
+const REASONS = ['Routine audit', 'Training', 'Issue follow-up', 'Grand opening', 'Menu rollout', 'Compliance check'];
+
+function ReasonPicker({ value, onChange, error }) {
+  const [open, setOpen] = React.useState(false);
+  return (
+    <div style={{ marginBottom: 16, position: 'relative' }}>
+      <div style={{ fontSize: 12, fontWeight: 800, color: T.soft, letterSpacing: 0.4, textTransform: 'uppercase', marginBottom: 5 }}>Reason for visit</div>
+      <button type="button" onClick={() => setOpen(!open)} style={{
+        width: '100%', height: 40, background: T.white, borderRadius: 8, padding: '0 12px',
+        border: `1.5px solid ${error ? T.error : open ? T.grape : T.line}`,
+        boxShadow: open ? `0 0 0 3px ${T.grape}18` : 'none',
+        display: 'flex', alignItems: 'center', gap: 8,
+        transition: 'border-color .15s',
+      }}>
+        <span style={{ flex: 1, fontSize: 14, fontWeight: 600, color: value ? T.ink : '#bbb', textAlign: 'left' }}>
+          {value || 'Select a reason…'}
+        </span>
+        <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke={T.soft} strokeWidth="2" strokeLinecap="round"
+          style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .15s', flexShrink: 0 }}>
+          <path d="M2.5 4L6 7.5 9.5 4"/>
+        </svg>
+      </button>
+      {open && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 50,
+          background: T.white, borderRadius: 10, overflow: 'hidden',
+          boxShadow: '0 8px 24px rgba(42,27,61,0.12), 0 0 0 1px rgba(42,27,61,0.08)',
+        }}>
+          {REASONS.map(r => (
+            <button key={r} type="button" onClick={() => { onChange(r); setOpen(false); }} style={{
+              width: '100%', padding: '9px 12px', border: 'none', textAlign: 'left',
+              background: r === value ? `${T.grape}08` : 'transparent',
+              fontFamily: 'inherit', fontSize: 13, fontWeight: 600,
+              color: r === value ? T.grape : T.ink,
+              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              borderBottom: `1px solid ${T.line}`,
+            }}
+              onMouseEnter={e => { if (r !== value) e.currentTarget.style.background = '#F5F3F9'; }}
+              onMouseLeave={e => { if (r !== value) e.currentTarget.style.background = 'transparent'; }}
+            >
+              {r}
+              {r === value && (
+                <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke={T.grape} strokeWidth="2.2" strokeLinecap="round">
+                  <path d="M2.5 7l3.5 3.5 5.5-7"/>
+                </svg>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+      {error && <p style={{ fontSize: 11, fontWeight: 700, color: T.error, marginTop: 4 }}>{error}</p>}
+    </div>
+  );
+}
+
+// ─── Card ─────────────────────────────────────────────────────────────
+function Card({ children, style: sx = {} }) {
+  return (
+    <div style={{
+      background: 'linear-gradient(180deg, rgba(255,255,255,0.96), rgba(255,255,255,0.88))', borderRadius: 16,
+      border: `1px solid ${T.line}`,
+      boxShadow: '0 20px 50px -28px rgba(91,47,176,0.30)',
+      backdropFilter: 'blur(10px)',
+      ...sx,
+    }}>{children}</div>
+  );
+}
+
+// ─── Navbar ───────────────────────────────────────────────────────────
+function Navbar({ user, currentScreen, onGoToForm, onHistory, onSignOut }) {
+  return (
+    <nav style={{
+      background: 'linear-gradient(180deg, rgba(255,255,255,0.92), rgba(255,255,255,0.82))', borderBottom: `1px solid ${T.line}`,
+      height: 60, display: 'flex', alignItems: 'center', padding: '0 24px', gap: 4,
+      position: 'sticky', top: 0, zIndex: 100,
+      boxShadow: '0 10px 30px -24px rgba(91,47,176,0.40)',
+      backdropFilter: 'blur(14px)',
+    }}>
+      {/* Brand */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <YogurtlandLogo size={44} />
+        <div style={{ lineHeight: 1 }}>
+          <div style={{ fontSize: 14, fontWeight: 900, letterSpacing: -0.3 }}>YL MARKETING</div>
+          <div style={{ fontSize: 9, fontWeight: 700, color: T.muted, letterSpacing: 0.8, textTransform: 'uppercase', marginTop: 2 }}>FBC Check-In</div>
+        </div>
+      </div>
+
+      <div style={{ width: 1, height: 20, background: T.line, margin: '0 12px' }} />
+
+      {/* Nav links */}
+      {[
+        { label: 'Check-in', key: 'form',    onClick: onGoToForm },
+        { label: 'My Visits', key: 'history', onClick: onHistory  },
+      ].map(({ label, key, onClick }) => {
+        const active = currentScreen === key;
+        return (
+          <button key={key} onClick={onClick} style={{
+            background: active ? `${T.grape}0D` : 'transparent',
+            color: active ? T.grape : T.soft,
+            border: 'none', borderRadius: 6,
+            padding: '6px 12px', fontSize: 13, fontWeight: 700,
+            transition: 'background .15s, color .15s',
+          }}
+            onMouseEnter={e => { if (!active) e.currentTarget.style.background = '#EFECF5'; }}
+            onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent'; }}
+          >{label}</button>
+        );
+      })}
+
+      <div style={{ flex: 1 }} />
+
+      {/* User */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <Avatar name={user.name} size={30} />
+        <span style={{ fontSize: 13, fontWeight: 700, color: T.ink }}>{user.name}</span>
+        <div style={{ width: 1, height: 18, background: T.line, margin: '0 4px' }} />
+        <button onClick={onSignOut} style={{
+          background: 'transparent', border: `1px solid ${T.line}`,
+          color: T.soft, fontSize: 12, fontWeight: 700, padding: '5px 11px', borderRadius: 6,
+          transition: 'background .15s',
+        }}
+          onMouseEnter={e => { e.currentTarget.style.background = '#EFECF5'; }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+        >Sign out</button>
+      </div>
+    </nav>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// SCREEN 1 · LOGIN
+// ─────────────────────────────────────────────────────────────────────
+function LoginScreen({ onLogin }) {
+  const [email,    setEmail]    = React.useState('');
+  const [password, setPassword] = React.useState('');
+  const [error,    setError]    = React.useState('');
+  const [loading,  setLoading]  = React.useState(false);
+  const canSubmit = email.trim() && password.trim();
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!canSubmit) return;
+    setLoading(true); setError('');
+    try {
+      const { token, user } = await api.login(email.trim(), password);
+      Auth.setToken(token); Auth.setUser(user);
+      onLogin(user, token);
+    } catch (err) {
+      setError(err.status === 401 ? "Email and password don't match" : 'Unable to sign in right now');
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div style={{
+      minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
+      background: T.pageBg, padding: 24,
+    }}>
+      <div style={{ width: '100%', maxWidth: 420 }}>
+        {/* Brand header */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 28 }}>
+        <YogurtlandLogo size={56} />
+        <div>
+            <div style={{ fontSize: 16, fontWeight: 900, letterSpacing: -0.4 }}>YL MARKETING</div>
+            <div style={{ fontSize: 10, fontWeight: 700, color: T.muted, letterSpacing: 0.8, textTransform: 'uppercase', marginTop: 2 }}>FBC Check-In</div>
+        </div>
+      </div>
+
+        <Card style={{ padding: 32 }}>
+          <h1 style={{ fontSize: 22, fontWeight: 900, letterSpacing: -0.5, marginBottom: 4, background: `linear-gradient(135deg, ${T.pink}, ${T.grape})`, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+            Welcome back<span style={{ color: T.grape }}>.</span>
+          </h1>
+          <p style={{ fontSize: 13, color: T.soft, marginBottom: 24, fontWeight: 600 }}>
+            Sign in to log a store visit.
+          </p>
+
+          <form onSubmit={handleSubmit}>
+            <Field label="Email" value={email} onChange={setEmail}
+              placeholder="you@yogurtland.com" type="email" autoFocus
+              error={error}
+              icon={
+                <svg width="15" height="15" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                  <rect x="2" y="4" width="14" height="10" rx="2"/><path d="M3 5l6 4.5L15 5"/>
+                </svg>
+              }
+            />
+            <Field label="Password" value={password} onChange={setPassword}
+              placeholder="••••••••" type="password"
+              icon={
+                <svg width="15" height="15" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                  <rect x="3" y="8" width="12" height="8" rx="1.5"/><path d="M6 8V5a3 3 0 016 0v3"/>
+                </svg>
+              }
+            />
+            <div style={{ marginBottom: 24 }} />
+            <Btn type="submit" disabled={!canSubmit || loading} style={{ width: '100%', height: 42, borderRadius: 8, fontSize: 14 }}>
+              {loading ? 'Signing in…' : <>
+                Sign in
+                <svg width="15" height="15" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                  <path d="M4 9h10M10 5l4 4-4 4"/>
+                </svg>
+              </>}
+            </Btn>
+          </form>
+        </Card>
+
+        <p style={{ textAlign: 'center', fontSize: 11, color: T.muted, fontWeight: 600, marginTop: 16 }}>
+          Use your company email and password.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function WorkModePicker({ value, onChange, error }) {
+  const options = [
+    { value: 'store_visit', label: 'Store Visit' },
+    { value: 'work_from_home', label: 'Work From Home' },
+  ];
+
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ fontSize: 12, fontWeight: 800, color: T.soft, letterSpacing: 0.4, textTransform: 'uppercase', marginBottom: 5 }}>
+        Work Location
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+        {options.map((option) => {
+          const active = value === option.value;
+          return (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => onChange(option.value)}
+              style={{
+                height: 40,
+                borderRadius: 8,
+                border: `1.5px solid ${error ? T.error : active ? T.grape : T.line}`,
+                background: active ? `${T.grape}10` : T.white,
+                color: active ? T.grape : T.ink,
+                fontSize: 13,
+                fontWeight: 800,
+                boxShadow: active ? `0 0 0 3px ${T.grape}12` : 'none',
+                transition: 'border-color .15s, box-shadow .15s, background .15s',
+              }}
+            >
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
+      {error && <p style={{ fontSize: 11, fontWeight: 700, color: T.error, marginTop: 4 }}>{error}</p>}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// SCREEN 2 · VISIT FORM
+// ─────────────────────────────────────────────────────────────────────
+function VisitFormScreen({ user, token, storeOptions, onSubmit, onGoToForm, onHistory, onSignOut }) {
+  const [workMode, setWorkMode] = React.useState('store_visit');
+  const [store,  setStore]  = React.useState('');
+  const [date,   setDate]   = React.useState(todayValue());
+  const [start,  setStart]  = React.useState('');
+  const [end,    setEnd]    = React.useState('');
+  const [reason, setReason] = React.useState('');
+  const [notes,  setNotes]  = React.useState('');
+  const [errors, setErrors] = React.useState({});
+  const [noteFocus, setNoteFocus] = React.useState(false);
+  const [submitting, setSubmitting] = React.useState(false);
+  const [gpsState, setGpsState] = React.useState({ status: 'checking', coords: null, reason: null });
+  const gpsRef = React.useRef(null);
+
+  const requestLocation = React.useCallback(async ({ promptUser = false } = {}) => {
+    setGpsState(prev => ({ ...prev, status: 'locating', reason: null }));
+    const permission = await getLocationPermissionState();
+    if (permission === 'denied') {
+      gpsRef.current = Promise.resolve(null);
+      setGpsState({ status: 'blocked', coords: null, reason: 'denied' });
+      return null;
+    }
+
+    const gpsPromise = captureGps(promptUser ? 12000 : 8000);
+    gpsRef.current = gpsPromise.then(result => result.ok ? result.coords : null);
+    const result = await gpsPromise;
+    if (result.ok) {
+      setGpsState({ status: 'ready', coords: result.coords, reason: null });
+      return result.coords;
+    }
+
+    setGpsState({ status: 'error', coords: null, reason: result.reason });
+    return null;
+  }, []);
+
+  React.useEffect(() => {
+    let alive = true;
+    (async () => {
+      const permission = await getLocationPermissionState();
+      if (!alive) return;
+      if (permission === 'denied') {
+        setGpsState({ status: 'blocked', coords: null, reason: 'denied' });
+        gpsRef.current = Promise.resolve(null);
+        return;
+      }
+      if (permission === 'prompt') {
+        setGpsState({ status: 'idle', coords: null, reason: null });
+        return;
+      }
+      requestLocation();
+    })();
+    return () => { alive = false; };
+  }, [requestLocation]);
+
+  const locationLabel =
+    gpsState.status === 'ready' ? formatCoords(gpsState.coords.lat, gpsState.coords.lng) :
+    gpsState.status === 'blocked' ? 'Location permission blocked' :
+    gpsState.status === 'locating' ? 'Detecting your location...' :
+    gpsState.status === 'idle' ? 'Location not requested yet' :
+    'Location unavailable';
+
+  const locationHint =
+    errors.gps ? errors.gps :
+    gpsState.status === 'ready' ? `Accuracy ${Math.round(gpsState.coords.accuracy)}m` :
+    gpsState.status === 'idle' ? 'Tap the button below to allow location access for this visit.' :
+    gpsState.status === 'blocked' ? 'Allow location in the browser/site settings, then retry.' :
+    gpsState.reason === 'timeout' ? 'Location request timed out. Retry when GPS/network is stable.' :
+    gpsState.reason === 'unavailable' ? 'Device location is unavailable right now.' :
+    gpsState.reason === 'unsupported' ? 'This browser does not support geolocation.' :
+    'Latitude and longitude are required for every visit.';
+
+  const validate = () => {
+    const e = {};
+    if (!workMode) e.workMode = 'Required';
+    if (!store.trim()) e.store = 'Required';
+    if (!date) e.date = 'Required';
+    if (!start) e.start = 'Required';
+    if (!reason) e.reason = 'Required';
+    if (gpsState.status === 'idle' || gpsState.status === 'checking' || gpsState.status === 'locating') e.gps = 'Capture location before submitting';
+    if (gpsState.status === 'blocked' || gpsState.status === 'error') e.gps = 'Location access is required to log a visit';
+    return e;
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    const e2 = validate();
+    if (Object.keys(e2).length) { setErrors(e2); return; }
+    setSubmitting(true);
+    const gps = await (gpsRef.current || requestLocation({ promptUser: true }) || Promise.resolve(null));
+    if (!gps) {
+      setErrors(p => ({ ...p, gps: 'Location access is required to log a visit' }));
+      setSubmitting(false);
+      return;
+    }
+    const payload = {
+      work_mode: workMode,
+      store_id: store.trim(),
+      visit_date: date, start_time: start, end_time: end || null, reason, notes,
+      gps_lat: gps.lat, gps_lng: gps.lng, gps_accuracy: gps.accuracy,
+    };
+    try {
+      if (token) {
+        const saved = await api.postVisit(token, payload);
+        onSubmit({ id: saved.id, workMode, store: payload.store_id, date, start, end, reason, notes, lat: gps.lat, lng: gps.lng, accuracy: gps.accuracy });
+      } else {
+        onSubmit({ id: `v${Date.now()}`, workMode, store: payload.store_id, date, start, end, reason, notes, lat: gps.lat, lng: gps.lng, accuracy: gps.accuracy });
+      }
+    } catch {
+      onSubmit({ id: `v${Date.now()}`, workMode, store: payload.store_id, date, start, end, reason, notes, lat: gps.lat, lng: gps.lng, accuracy: gps.accuracy });
+    }
+  };
+
+  return (
+    <div style={{ minHeight: '100vh', background: T.pageBg }}>
+      <Navbar user={user} currentScreen="form" onGoToForm={onGoToForm} onHistory={onHistory} onSignOut={onSignOut} />
+      <div style={{ maxWidth: 660, margin: '0 auto', padding: '36px 24px 56px' }}>
+        <div style={{ marginBottom: 24 }}>
+          <h1 style={{ fontSize: 22, fontWeight: 900, letterSpacing: -0.5, background: `linear-gradient(135deg, ${T.pink}, ${T.grape}, ${T.teal})`, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Log a store visit</h1>
+          <p style={{ fontSize: 13, color: T.soft, marginTop: 4, fontWeight: 600 }}>
+            Fill this out when you arrive. Add end time when you leave.
+          </p>
+        </div>
+
+        <Card style={{ padding: 28 }}>
+          <form onSubmit={handleSubmit}>
+            <WorkModePicker
+              value={workMode}
+              onChange={(value) => {
+                setWorkMode(value);
+                setErrors((p) => ({ ...p, workMode: '', store: '' }));
+                if (value === 'work_from_home') setStore('');
+              }}
+              error={errors.workMode}
+            />
+
+            <Field label="Store Name" value={store} onChange={v => { setStore(v); setErrors(p => ({ ...p, store: '' })); }}
+              placeholder="Select or search a store" error={errors.store}
+              hint={workMode === 'work_from_home' ? 'Pick the store you are supporting while working from home.' : 'Select the store you are visiting.'}
+              type="text"
+              listOptions={storeOptions}
+              icon={
+                <svg width="15" height="15" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 8l1-4h10l1 4M3 8v7h12V8M3 8h12M7 15v-4h4v4"/>
+                </svg>
+              }
+            />
+
+            <Field label="Visit date" value={date} onChange={v => { setDate(v); setErrors(p => ({ ...p, date: '' })); }}
+              type="date" error={errors.date}
+              icon={
+                <svg width="15" height="15" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="4" width="12" height="11" rx="2"/><path d="M6 2.8v2.4M12 2.8v2.4M3 7.5h12"/>
+                </svg>
+              }
+            />
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+              <Field label="Start time" value={start} onChange={v => { setStart(v); setErrors(p => ({ ...p, start: '' })); }}
+                type="time" error={errors.start}
+                icon={
+                  <svg width="15" height="15" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                    <circle cx="9" cy="9" r="7"/><path d="M9 5v4l3 2"/>
+                  </svg>
+                }
+              />
+              <Field label="End time" value={end} onChange={setEnd} type="time"
+                hint="Optional — add when you leave"
+                icon={
+                  <svg width="15" height="15" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                    <circle cx="9" cy="9" r="7"/><path d="M9 5v4l3 2"/>
+                  </svg>
+                }
+              />
+            </div>
+
+            <ReasonPicker value={reason} onChange={v => { setReason(v); setErrors(p => ({ ...p, reason: '' })); }} error={errors.reason} />
+
+            <div style={{ marginBottom: 24 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                <span style={{ fontSize: 12, fontWeight: 800, color: T.soft, letterSpacing: 0.4, textTransform: 'uppercase' }}>Notes</span>
+                <span style={{ fontSize: 11, fontWeight: 600, color: notes.length > 450 ? T.error : T.muted }}>{notes.length}/500</span>
+              </div>
+              <textarea
+                value={notes} onChange={e => setNotes(e.target.value.slice(0, 500))}
+                onFocus={() => setNoteFocus(true)} onBlur={() => setNoteFocus(false)}
+                placeholder="What did you observe? Any issues to flag?"
+                rows={3} maxLength={500}
+                style={{
+                  width: '100%', borderRadius: 8, padding: '9px 12px',
+                  border: `1.5px solid ${noteFocus ? T.grape : T.line}`,
+                  boxShadow: noteFocus ? `0 0 0 3px ${T.grape}18` : 'none',
+                  background: T.white, resize: 'vertical',
+                  fontFamily: 'inherit', fontSize: 14, fontWeight: 600,
+                  color: T.ink, lineHeight: 1.6, outline: 'none',
+                  transition: 'border-color .15s, box-shadow .15s', minHeight: 80,
+                }}
+              />
+            </div>
+
+            <div style={{
+              marginBottom: 24,
+              padding: '10px 12px',
+              borderRadius: 8,
+              background: gpsState.status === 'ready' ? 'linear-gradient(135deg, rgba(121,193,67,0.12), rgba(167,216,76,0.16))' : gpsState.status === 'error' ? `${T.error}10` : 'linear-gradient(135deg, rgba(242,77,136,0.08), rgba(155,18,101,0.08))',
+              border: `1px solid ${errors.gps ? T.error : T.line}`,
+            }}>
+              <div style={{ fontSize: 12, fontWeight: 800, color: T.soft, letterSpacing: 0.4, textTransform: 'uppercase', marginBottom: 4 }}>
+                Location
+              </div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: errors.gps ? T.error : T.ink }}>
+                {locationLabel}
+              </div>
+              <div style={{ fontSize: 11, color: errors.gps ? T.error : T.muted, marginTop: 4 }}>
+                {locationHint}
+              </div>
+              {gpsState.status === 'ready' && (
+                <div style={{ fontSize: 11, color: T.soft, marginTop: 6, fontWeight: 600 }}>
+                  This location will be attached to the visit record for consultant review.
+                </div>
+              )}
+              {gpsState.status !== 'ready' && (
+                <div style={{ marginTop: 10, display: 'flex', justifyContent: 'flex-start' }}>
+                  <Btn
+                    variant="ghost"
+                    onClick={() => { setErrors(p => ({ ...p, gps: '' })); requestLocation({ promptUser: true }); }}
+                    style={{ height: 34, padding: '0 12px', fontSize: 12 }}
+                  >
+                    {gpsState.status === 'locating' ? 'Checking location…' : 'Retry location'}
+                  </Btn>
+                </div>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <Btn type="submit" disabled={submitting} style={{ minWidth: 148 }}>
+                {submitting ? 'Submitting…' : <>
+                  Submit visit
+                  <svg width="14" height="14" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                    <path d="M4 9h10M10 5l4 4-4 4"/>
+                  </svg>
+                </>}
+              </Btn>
+            </div>
+          </form>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// SCREEN 3 · SUBMITTED
+// ─────────────────────────────────────────────────────────────────────
+function SubmittedScreen({ visit, token, onCheckout, onNewVisit, onHistory, user, onGoToForm, onSignOut }) {
+  const [checkedOut,   setCheckedOut]   = React.useState(!!visit.end);
+  const [endTime,      setEndTime]      = React.useState(visit.end || '');
+  const [checkingOut,  setCheckingOut]  = React.useState(false);
+  const [checkoutGps,  setCheckoutGps]  = React.useState(
+    typeof visit.checkoutLat === 'number' && typeof visit.checkoutLng === 'number'
+      ? { lat: visit.checkoutLat, lng: visit.checkoutLng, accuracy: visit.checkoutAccuracy }
+      : null
+  );
+
+  const handleCheckout = async () => {
+    const now = new Date();
+    const t = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+    setEndTime(t); setCheckingOut(true);
+    const gps = await captureGps(5000);
+    setCheckoutGps(gps);
+    const payload = { end_time: t, ...(gps ? { gps_lat: gps.lat, gps_lng: gps.lng, gps_accuracy: gps.accuracy } : {}) };
+    try {
+      if (token && visit.id && !visit.id.startsWith('v')) {
+        await api.patchVisit(token, visit.id, payload);
+      }
+    } catch {}
+    setCheckedOut(true);
+    onCheckout && onCheckout(t, gps);
+  };
+
+  return (
+    <div style={{ minHeight: '100vh', background: T.pageBg }}>
+      <Navbar user={user} currentScreen="form" onGoToForm={onGoToForm} onHistory={onHistory} onSignOut={onSignOut} />
+      <div style={{ maxWidth: 660, margin: '0 auto', padding: '36px 24px 56px' }}>
+        <Card style={{ padding: 32 }}>
+          {/* Success header */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 28, paddingBottom: 24, borderBottom: `1px solid ${T.line}` }}>
+            <div style={{
+              width: 48, height: 48, borderRadius: 12, flexShrink: 0,
+              background: `linear-gradient(135deg, ${T.pink}, ${T.grape})`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              boxShadow: `0 8px 20px -4px ${T.grape}40`,
+            }}>
+              <svg width="24" height="24" viewBox="0 0 28 28" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M6 14l5 5 10-11"/>
+              </svg>
+            </div>
+            <div>
+              <h2 style={{ fontSize: 20, fontWeight: 900, letterSpacing: -0.4 }}>Visit logged!</h2>
+              <p style={{ fontSize: 13, color: T.soft, marginTop: 2, fontWeight: 600 }}>
+                {workModeLabel(visit.workMode)} · {storeLabel(visit)} · {visit.date} · {formatTime(visit.start)}
+                {checkedOut ? ` → ${formatTime(endTime)}` : ' · in progress'}
+              </p>
+            </div>
+          </div>
+
+          {/* Details */}
+          <div style={{ marginBottom: 28 }}>
+            {[
+              ['Work location', workModeLabel(visit.workMode)],
+              ['Store', storeLabel(visit)],
+              ['Consultant name', visit.consultantName || '—'],
+              ['Visit date', visit.date],
+              ['Start time', formatTime(visit.start)],
+              ['End time', checkedOut ? formatTime(endTime) : '—'],
+              ['Reason', visit.reason],
+              ['Visit location', formatCoords(visit.lat, visit.lng)],
+            ].map(([k, v]) => (
+              <div key={k} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: `1px solid ${T.line}` }}>
+                <span style={{ fontSize: 11, fontWeight: 800, color: T.soft, textTransform: 'uppercase', letterSpacing: 0.4 }}>{k}</span>
+                <span style={{ fontSize: 14, fontWeight: 700, color: T.ink }}>{v}</span>
+              </div>
+            ))}
+            {checkedOut && checkoutGps && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: `1px solid ${T.line}` }}>
+                <span style={{ fontSize: 11, fontWeight: 800, color: T.soft, textTransform: 'uppercase', letterSpacing: 0.4 }}>Checkout location</span>
+                <span style={{ fontSize: 14, fontWeight: 700, color: T.ink }}>{formatCoords(checkoutGps.lat, checkoutGps.lng)}</span>
+              </div>
+            )}
+            {visit.notes && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, paddingTop: 10, alignItems: 'flex-start' }}>
+                <span style={{ fontSize: 11, fontWeight: 800, color: T.soft, textTransform: 'uppercase', letterSpacing: 0.4, flexShrink: 0 }}>Notes</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: T.ink, textAlign: 'right', lineHeight: 1.6 }}>{visit.notes}</span>
+              </div>
+            )}
+          </div>
+
+          <div style={{
+            marginBottom: 28,
+            padding: 16,
+            borderRadius: 10,
+            background: 'linear-gradient(135deg, rgba(242,77,136,0.08), rgba(255,226,122,0.12), rgba(121,193,67,0.10))',
+            border: `1px solid ${T.line}`,
+          }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: T.soft, letterSpacing: 0.4, textTransform: 'uppercase', marginBottom: 10 }}>
+              Consultant Location View
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 800, color: T.ink }}>
+                  Visit: {formatCoords(visit.lat, visit.lng)}
+                </div>
+                {typeof visit.accuracy === 'number' && (
+                  <div style={{ fontSize: 12, color: T.muted, marginTop: 4 }}>
+                    Accuracy {Math.round(visit.accuracy)}m
+                  </div>
+                )}
+                {checkedOut && checkoutGps && (
+                  <div style={{ fontSize: 12, color: T.soft, marginTop: 6 }}>
+                    Checkout: {formatCoords(checkoutGps.lat, checkoutGps.lng)}
+                  </div>
+                )}
+              </div>
+              {(typeof visit.lat === 'number' && typeof visit.lng === 'number') && (
+                <a
+                  href={mapsUrl(visit.lat, visit.lng)}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    fontSize: 12,
+                    fontWeight: 800,
+                    color: T.grape,
+                    textDecoration: 'none',
+                  }}
+                >
+                  Open in Maps
+                  <svg width="12" height="12" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                    <path d="M7 4h7v7M14 4L4 14"/>
+                  </svg>
+                </a>
+              )}
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            {!checkedOut ? (
+              <Btn variant="teal" onClick={handleCheckout} disabled={checkingOut} style={{ flex: '1 1 160px' }}>
+                {checkingOut ? 'Logging checkout…' : <>
+                  Check out now
+                  <svg width="14" height="14" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                    <path d="M4 9h10M10 5l4 4-4 4"/>
+                  </svg>
+                </>}
+              </Btn>
+            ) : (
+              <div style={{
+                flex: '1 1 160px', padding: '9px 14px', background: `${T.success}12`,
+                borderRadius: 8, display: 'flex', alignItems: 'center', gap: 8,
+                border: `1px solid ${T.success}25`,
+              }}>
+                <svg width="16" height="16" viewBox="0 0 18 18" fill="none" stroke={T.success} strokeWidth="2" strokeLinecap="round">
+                  <path d="M4 9l4 4 6-6"/>
+                </svg>
+                <span style={{ fontSize: 13, fontWeight: 700, color: T.success }}>Checked out at {formatTime(endTime)}</span>
+              </div>
+            )}
+            <Btn variant="ghost" onClick={onNewVisit}>Log another visit</Btn>
+            <Btn variant="ghost" onClick={onHistory}>View my visits</Btn>
+          </div>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// SCREEN 4 · MY VISITS
+// ─────────────────────────────────────────────────────────────────────
+function MyVisitsScreen({ user, visits, filters, storeOptions, onFilterChange, onSearch, onResetFilters, onNewVisit, onGoToForm, onHistory, onSignOut }) {
+  const reasonColor = {
+    'Routine audit':   T.grape,
+    'Training':        T.pink,
+    'Issue follow-up': 'oklch(60% 0.18 35)',
+    'Grand opening':   'oklch(62% 0.20 120)',
+    'Menu rollout':    'oklch(60% 0.18 200)',
+    'Compliance check':'oklch(55% 0.16 260)',
+  };
+  const showingStoreDayResults = !!filters.storeId && !!filters.visitDate;
+
+  return (
+    <div style={{ minHeight: '100vh', background: T.pageBg }}>
+      <Navbar user={user} currentScreen="history" onGoToForm={onGoToForm} onHistory={onHistory} onSignOut={onSignOut} />
+      <div style={{ maxWidth: 740, margin: '0 auto', padding: '36px 24px 56px' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24, gap: 16, flexWrap: 'wrap' }}>
+          <div>
+            <h1 style={{ fontSize: 22, fontWeight: 900, letterSpacing: -0.5, background: `linear-gradient(135deg, ${T.pink}, ${T.grape}, ${T.teal})`, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>My Visits</h1>
+            <p style={{ fontSize: 13, color: T.soft, marginTop: 4, fontWeight: 600 }}>
+              {showingStoreDayResults
+                ? `${visits.length} visit${visits.length !== 1 ? 's' : ''} found for ${filters.storeId} on ${filters.visitDate}`
+                : `${visits.length} visit${visits.length !== 1 ? 's' : ''} logged`}
+            </p>
+          </div>
+          <Btn onClick={onNewVisit}>
+            <svg width="13" height="13" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <path d="M9 4v10M4 9h10"/>
+            </svg>
+            Log new visit
+          </Btn>
+        </div>
+
+        <Card style={{ padding: 18, marginBottom: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr auto auto', gap: 12, alignItems: 'end' }}>
+            <Field
+              label="Store"
+              value={filters.storeId}
+              onChange={(value) => onFilterChange({ ...filters, storeId: value })}
+              placeholder="Select or search a store"
+              listOptions={storeOptions}
+            />
+            <Field
+              label="Visit Date"
+              value={filters.visitDate}
+              onChange={(value) => onFilterChange({ ...filters, visitDate: value })}
+              type="date"
+            />
+            <Btn onClick={onSearch} disabled={!filters.storeId || !filters.visitDate} style={{ minWidth: 134 }}>
+              Search Visits
+            </Btn>
+            <Btn variant="ghost" onClick={onResetFilters}>
+              Reset
+            </Btn>
+          </div>
+        </Card>
+
+        {visits.length === 0 ? (
+          <Card style={{ padding: 48, textAlign: 'center' }}>
+            <svg width="36" height="36" viewBox="0 0 40 40" fill="none" stroke={T.line} strokeWidth="2" strokeLinecap="round" style={{ margin: '0 auto 12px' }}>
+              <rect x="6" y="12" width="28" height="22" rx="3"/>
+              <path d="M14 12V9a6 6 0 0112 0v3"/>
+              <path d="M16 22h8M20 18v8"/>
+            </svg>
+            <div style={{ fontSize: 14, fontWeight: 700, color: T.soft }}>{showingStoreDayResults ? 'No matching visits' : 'No visits yet'}</div>
+            <div style={{ fontSize: 13, color: T.muted, marginTop: 4 }}>
+              {showingStoreDayResults ? 'Try a different store or date.' : 'Log your first store visit to see it here.'}
+            </div>
+          </Card>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }`}</style>
+            {visits.map((v) => {
+              const color = reasonColor[v.reason] || T.grape;
+              const isActive = v.status === 'active';
+              return (
+                <Card key={v.id} style={{
+                  padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 14,
+                  border: isActive ? `1.5px solid ${T.pink}50` : `1px solid ${T.line}`,
+                  boxShadow: isActive ? `0 2px 12px ${T.pink}14` : '0 1px 3px rgba(42,27,61,0.07)',
+                }}>
+                  <div style={{
+                    width: 42, height: 42, borderRadius: 10, flexShrink: 0,
+                    background: isActive ? `linear-gradient(135deg, ${T.pink}, ${T.grape})` : `${color}12`,
+                    color: isActive ? '#fff' : color,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 11, fontWeight: 900, letterSpacing: -0.3,
+                  }}>#{v.store}</div>
+
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+                      <span style={{ fontSize: 14, fontWeight: 800, color: T.ink }}>{v.reason}</span>
+                      {isActive && (
+                        <span style={{
+                          fontSize: 10, fontWeight: 800, color: T.pink,
+                          background: `${T.pink}15`, padding: '2px 7px', borderRadius: 999,
+                          letterSpacing: 0.5, textTransform: 'uppercase',
+                          display: 'inline-flex', alignItems: 'center', gap: 4,
+                        }}>
+                          <span style={{ width: 5, height: 5, borderRadius: '50%', background: T.pink, display: 'inline-block', animation: 'pulse 1.5s infinite' }} />
+                          Active
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 8, marginTop: 4 }}>
+                      {[
+                        ['Name', v.consultantName || '—'],
+                        ['Work Location', workModeLabel(v.workMode)],
+                        ['Store', storeLabel(v)],
+                        ['Visit Date', v.date],
+                        ['Start', formatTime(v.start)],
+                        ['End', v.end ? formatTime(v.end) : 'Ongoing'],
+                      ].map(([label, value]) => (
+                        <div key={label}>
+                          <div style={{ fontSize: 10, fontWeight: 800, color: T.muted, textTransform: 'uppercase', letterSpacing: 0.4 }}>{label}</div>
+                          <div style={{ fontSize: 12, color: T.soft, fontWeight: 700, marginTop: 2 }}>{value}</div>
+                        </div>
+                      ))}
+                    </div>
+                    {(typeof v.lat === 'number' && typeof v.lng === 'number') && (
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginTop: 6, flexWrap: 'wrap' }}>
+                        <div style={{ fontSize: 12, color: T.muted }}>
+                          Consultant location: {formatCoords(v.lat, v.lng)}
+                        </div>
+                        <a
+                          href={mapsUrl(v.lat, v.lng)}
+                          target="_blank"
+                          rel="noreferrer"
+                          style={{ fontSize: 11, fontWeight: 800, color: color, textDecoration: 'none' }}
+                        >
+                          View map
+                        </a>
+                      </div>
+                    )}
+                    {v.notes && (
+                      <div style={{ fontSize: 12, color: T.muted, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {v.notes}
+                      </div>
+                    )}
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// APP
+// ─────────────────────────────────────────────────────────────────────
+function App() {
+  const [screen,    setScreen]    = React.useState('login');
+  const [user,      setUser]      = React.useState(null);
+  const [token,     setToken]     = React.useState(null);
+  const [lastVisit, setLastVisit] = React.useState(null);
+  const [visits,    setVisits]    = React.useState([]);
+  const [storeOptions, setStoreOptions] = React.useState([]);
+  const [visitFilters, setVisitFilters] = React.useState({ storeId: '', visitDate: '' });
+
+  React.useEffect(() => {
+    const savedUser  = Auth.getUser();
+    const savedToken = Auth.getToken();
+    if (savedUser && savedToken) {
+      setUser(savedUser); setToken(savedToken);
+      loadVisits(savedToken, { storeId: '', visitDate: '' }); setScreen('form');
+    } else {
+      Auth.clear();
+    }
+  }, []);
+
+  React.useEffect(() => {
+    let active = true;
+    loadStoreOptions()
+      .then((stores) => { if (active) setStoreOptions(Array.isArray(stores) ? stores : []); })
+      .catch(() => { if (active) setStoreOptions([]); });
+    return () => { active = false; };
+  }, []);
+
+  const loadVisits = async (tok, filters = {}) => {
+    try {
+      if (!tok) {
+        setVisits([]);
+        return;
+      }
+
+      setVisits((await api.getVisits(tok, filters)).map(normalizeVisit));
+    } catch {
+      setVisits([]);
+    }
+  };
+
+  const handleLogin = (u, tok) => {
+    setUser(u); setToken(tok); loadVisits(tok, visitFilters); setScreen('form');
+  };
+
+  const handleSubmit = (data) => {
+    const visit = normalizeVisit({ id: data.id, consultant_name: user?.name, work_mode: data.workMode, store: data.store, date: data.date, start: data.start, end: data.end, reason: data.reason, notes: data.notes, status: 'active', lat: data.lat, lng: data.lng, accuracy: data.accuracy });
+    setVisits(prev => [visit, ...prev]);
+    setLastVisit(visit);
+    setScreen('submitted');
+  };
+
+  const handleCheckout = (endTime, gps) => {
+    const updates = {
+      end: endTime,
+      status: 'done',
+      ...(gps ? { checkoutLat: gps.lat, checkoutLng: gps.lng, checkoutAccuracy: gps.accuracy } : {}),
+    };
+    setVisits(prev => prev.map(v => v.id === lastVisit?.id ? { ...v, ...updates } : v));
+    setLastVisit(prev => prev ? { ...prev, ...updates } : prev);
+  };
+
+  const handleSignOut = () => {
+    Auth.clear(); setUser(null); setToken(null); setLastVisit(null); setVisits([]); setScreen('login');
+  };
+
+  const handleSearchVisits = () => {
+    loadVisits(token, visitFilters);
+  };
+
+  const handleResetVisitFilters = () => {
+    const cleared = { storeId: '', visitDate: '' };
+    setVisitFilters(cleared);
+    loadVisits(token, cleared);
+  };
+
+  const nav = { user, onGoToForm: () => setScreen('form'), onHistory: () => setScreen('history'), onSignOut: handleSignOut };
+
+  return (
+    <>
+      {screen === 'login'     && <LoginScreen onLogin={handleLogin} />}
+      {screen === 'form'      && <VisitFormScreen {...nav} token={token} storeOptions={storeOptions} onSubmit={handleSubmit} />}
+      {screen === 'submitted' && <SubmittedScreen {...nav} visit={lastVisit} token={token} onCheckout={handleCheckout} onNewVisit={() => setScreen('form')} />}
+      {screen === 'history'   && <MyVisitsScreen  {...nav} visits={visits} filters={visitFilters} storeOptions={storeOptions} onFilterChange={setVisitFilters} onSearch={handleSearchVisits} onResetFilters={handleResetVisitFilters} onNewVisit={() => setScreen('form')} />}
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

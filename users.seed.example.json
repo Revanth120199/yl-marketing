@@ -1,0 +1,20 @@
+[
+  {
+    "email": "manager@yogurtland.com",
+    "password": "ChangeMe123!",
+    "name": "Store Manager",
+    "role": "manager"
+  },
+  {
+    "email": "consultant1@yogurtland.com",
+    "password": "ChangeMe123!",
+    "name": "Consultant One",
+    "role": "consultant"
+  },
+  {
+    "email": "consultant2@swirlops.com",
+    "password": "ChangeMe123!",
+    "name": "Consultant Two",
+    "role": "consultant"
+  }
+]

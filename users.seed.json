@@ -1,0 +1,32 @@
+[
+  {
+    "email": "nisha.naik@yogurtland.com",
+    "password": "nisha.naik@yogurtland.com",
+    "name": "Nisha Naik",
+    "role": "consultant"
+  },
+  {
+    "email": "sam.kwon@yogurtland.com",
+    "password": "sam.kwon@yogurtland.com",
+    "name": "Sam Kwon",
+    "role": "consultant"
+  },
+  {
+    "email": "harsha.mittapalli@yogurtland.com",
+    "password": "harsha.mittapalli@yogurtland.com",
+    "name": "Harsha Mittapalli",
+    "role": "consultant"
+  },
+  {
+    "email": "revanth.apuri@yogurtland.com",
+    "password": "revanth.apuri@yogurtland.com",
+    "name": "Revanth Apuri",
+    "role": "consultant"
+  },
+  {
+    "email": "phillip.chang@yogurtland.com",
+    "password": "phillip.chang@yogurtland.com",
+    "name": "Phillip Chang",
+    "role": "consultant"
+  }
+]
