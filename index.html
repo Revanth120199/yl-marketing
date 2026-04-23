@@ -309,24 +309,60 @@ const OTHER_REASON = 'Other';
 function ReasonPicker({ value, onChange, error }) {
   const [open, setOpen] = React.useState(false);
   const isCustomReason = !!value && !REASONS.includes(value);
+  const isOtherMode = value === OTHER_REASON || isCustomReason;
   return (
     <div style={{ marginBottom: 16, position: 'relative' }}>
       <div style={{ fontSize: 12, fontWeight: 800, color: T.soft, letterSpacing: 0.4, textTransform: 'uppercase', marginBottom: 5 }}>Reason for visit</div>
-      <button type="button" onClick={() => setOpen(!open)} style={{
+      <div style={{
         width: '100%', height: 40, background: T.white, borderRadius: 8, padding: '0 12px',
         border: `1.5px solid ${error ? T.error : open ? T.grape : T.line}`,
         boxShadow: open ? `0 0 0 3px ${T.grape}18` : 'none',
         display: 'flex', alignItems: 'center', gap: 8,
         transition: 'border-color .15s',
       }}>
-        <span style={{ flex: 1, fontSize: 14, fontWeight: 600, color: value ? T.ink : '#bbb', textAlign: 'left' }}>
-          {value || 'Select a reason…'}
-        </span>
-        <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke={T.soft} strokeWidth="2" strokeLinecap="round"
-          style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .15s', flexShrink: 0 }}>
-          <path d="M2.5 4L6 7.5 9.5 4"/>
-        </svg>
-      </button>
+        {isOtherMode ? (
+          <input
+            value={isCustomReason ? value : ''}
+            onChange={e => onChange(e.target.value)}
+            placeholder="Type the reason for this visit"
+            style={{
+              flex: 1,
+              border: 'none',
+              outline: 'none',
+              background: 'transparent',
+              fontFamily: 'inherit',
+              fontSize: 14,
+              fontWeight: 600,
+              color: T.ink,
+              minWidth: 0,
+            }}
+          />
+        ) : (
+          <button type="button" onClick={() => setOpen(!open)} style={{
+            flex: 1,
+            border: 'none',
+            background: 'transparent',
+            textAlign: 'left',
+            fontFamily: 'inherit',
+            fontSize: 14,
+            fontWeight: 600,
+            color: value ? T.ink : '#bbb',
+            padding: 0,
+          }}>
+            {value || 'Select a reason…'}
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={() => setOpen(!open)}
+          style={{ border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', padding: 0, cursor: 'pointer', flexShrink: 0 }}
+        >
+          <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke={T.soft} strokeWidth="2" strokeLinecap="round"
+            style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .15s', flexShrink: 0 }}>
+            <path d="M2.5 4L6 7.5 9.5 4"/>
+          </svg>
+        </button>
+      </div>
       {open && (
         <div style={{
           position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 50,
@@ -334,7 +370,7 @@ function ReasonPicker({ value, onChange, error }) {
           boxShadow: '0 8px 24px rgba(42,27,61,0.12), 0 0 0 1px rgba(42,27,61,0.08)',
         }}>
           {[...REASONS, OTHER_REASON].map(r => (
-            <button key={r} type="button" onClick={() => { onChange(r); setOpen(false); }} style={{
+            <button key={r} type="button" onClick={() => { onChange(r === OTHER_REASON ? OTHER_REASON : r); setOpen(false); }} style={{
               width: '100%', padding: '9px 12px', border: 'none', textAlign: 'left',
               background: (r === value || (r === OTHER_REASON && isCustomReason)) ? `${T.grape}08` : 'transparent',
               fontFamily: 'inherit', fontSize: 13, fontWeight: 600,
@@ -353,16 +389,6 @@ function ReasonPicker({ value, onChange, error }) {
               )}
             </button>
           ))}
-        </div>
-      )}
-      {(value === OTHER_REASON || isCustomReason) && (
-        <div style={{ marginTop: 10 }}>
-          <Field
-            label="Other reason"
-            value={isCustomReason ? value : ''}
-            onChange={onChange}
-            placeholder="Type the reason for this visit"
-          />
         </div>
       )}
       {error && <p style={{ fontSize: 11, fontWeight: 700, color: T.error, marginTop: 4 }}>{error}</p>}
