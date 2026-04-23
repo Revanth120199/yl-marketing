@@ -12,12 +12,13 @@
     html, body {
       min-height: 100%;
       background:
-        radial-gradient(circle at top left, rgba(255, 138, 180, 0.28), transparent 28%),
-        radial-gradient(circle at top right, rgba(121, 193, 67, 0.22), transparent 24%),
-        linear-gradient(180deg, #FFF7FB 0%, #FFFDF7 38%, #F7FBF2 100%);
+        radial-gradient(circle at top left, rgba(150, 9, 83, 0.16), transparent 32%),
+        radial-gradient(circle at 88% 12%, rgba(141, 198, 63, 0.18), transparent 24%),
+        radial-gradient(circle at 50% 100%, rgba(247, 185, 212, 0.22), transparent 28%),
+        linear-gradient(180deg, #FFF9FC 0%, #FFF8EC 48%, #F5FBEA 100%);
       font-family: 'Nunito', ui-rounded, -apple-system, sans-serif;
       -webkit-font-smoothing: antialiased;
-      color: #2A1B3D;
+      color: #341426;
     }
     #root { min-height: 100vh; }
     input[type="time"]::-webkit-calendar-picker-indicator { opacity: 0.4; cursor: pointer; }
@@ -137,19 +138,21 @@ const DEMO_VISITS = [
 
 // ─── Design tokens ────────────────────────────────────────────────────
 const T = {
-  pink:    '#F24D88',
-  grape:   '#9B1265',
-  teal:    '#79C143',
-  lime:    '#A7D84C',
-  sunny:   '#FFE27A',
+  pink:    '#F7B9D4',
+  grape:   '#960953',
+  teal:    '#8DC63F',
+  lime:    '#B3D965',
+  sunny:   '#FFF0A6',
   white:   '#FFFFFF',
-  pageBg:  'linear-gradient(180deg, #FFF7FB 0%, #FFFDF7 38%, #F7FBF2 100%)',
-  ink:     '#2A1B3D',
-  soft:    '#6D5B86',
-  muted:   '#9B8FAD',
-  line:    'rgba(91,47,176,0.14)',
+  pageBg:  'radial-gradient(circle at top left, rgba(150,9,83,0.15), transparent 30%), radial-gradient(circle at top right, rgba(141,198,63,0.16), transparent 24%), linear-gradient(180deg, #FFF9FC 0%, #FFF8EF 46%, #F4FAE8 100%)',
+  panelBg: 'linear-gradient(180deg, rgba(255,255,255,0.97), rgba(255,252,246,0.94))',
+  panelSoft:'linear-gradient(180deg, rgba(255,245,250,0.95), rgba(247,252,236,0.92))',
+  ink:     '#341426',
+  soft:    '#704256',
+  muted:   '#9E7388',
+  line:    'rgba(150,9,83,0.12)',
   error:   'oklch(65% 0.22 20)',
-  success: 'oklch(60% 0.18 160)',
+  success: '#4E8D1A',
 };
 
 function formatTime(t) {
@@ -223,7 +226,7 @@ function Avatar({ name, size = 32 }) {
   return (
     <div style={{
       width: size, height: size, borderRadius: '50%', flexShrink: 0,
-      background: `linear-gradient(135deg, ${T.pink}, ${T.grape})`,
+      background: `linear-gradient(135deg, ${T.grape}, #C11E72)`,
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       fontSize: size * 0.38, fontWeight: 800, color: '#fff', letterSpacing: -0.5,
     }}>{initials}</div>
@@ -233,16 +236,16 @@ function Avatar({ name, size = 32 }) {
 // ─── Button ───────────────────────────────────────────────────────────
 function Btn({ children, variant = 'primary', onClick, disabled, type = 'button', style: sx = {} }) {
   const base = {
-    primary: { bg: `linear-gradient(135deg, ${T.pink}, ${T.grape})`, fg: '#fff', shadow: `0 12px 24px -10px ${T.grape}75` },
-    teal:    { bg: `linear-gradient(135deg, ${T.teal}, ${T.lime})`,  fg: '#fff', shadow: `0 12px 24px -10px ${T.teal}70`  },
-    ghost:   { bg: 'rgba(255,255,255,0.7)', fg: T.soft, shadow: 'none', border: `1.5px solid ${T.line}` },
+    primary: { bg: `linear-gradient(135deg, ${T.grape}, #C31971)`, fg: '#fff', shadow: '0 16px 28px -16px rgba(150,9,83,0.65)' },
+    teal:    { bg: `linear-gradient(135deg, ${T.teal}, ${T.lime})`,  fg: '#23400A', shadow: '0 16px 28px -16px rgba(141,198,63,0.65)'  },
+    ghost:   { bg: 'rgba(255,255,255,0.78)', fg: T.soft, shadow: 'none', border: `1.5px solid ${T.line}` },
   };
   const v = base[variant] || base.primary;
   return (
     <button type={type} onClick={onClick} disabled={disabled} style={{
-      height: 40, padding: '0 18px', borderRadius: 8,
+      height: 42, padding: '0 18px', borderRadius: 999,
       background: v.bg, color: v.fg, border: v.border || 'none',
-      fontWeight: 800, fontSize: 13, letterSpacing: -0.1,
+      fontWeight: 900, fontSize: 13, letterSpacing: 0.1,
       cursor: disabled ? 'not-allowed' : 'pointer',
       opacity: disabled ? 0.45 : 1,
       boxShadow: disabled ? 'none' : v.shadow,
@@ -358,10 +361,11 @@ function ReasonPicker({ value, onChange, error }) {
 function Card({ children, style: sx = {} }) {
   return (
     <div style={{
-      background: 'linear-gradient(180deg, rgba(255,255,255,0.96), rgba(255,255,255,0.88))', borderRadius: 16,
+      background: T.panelBg, borderRadius: 24,
       border: `1px solid ${T.line}`,
-      boxShadow: '0 20px 50px -28px rgba(91,47,176,0.30)',
-      backdropFilter: 'blur(10px)',
+      boxShadow: '0 30px 70px -38px rgba(99,23,55,0.35)',
+      backdropFilter: 'blur(16px)',
+      overflow: 'hidden',
       ...sx,
     }}>{children}</div>
   );
@@ -371,10 +375,10 @@ function Card({ children, style: sx = {} }) {
 function Navbar({ user, currentScreen, onGoToForm, onHistory, onSignOut }) {
   return (
     <nav style={{
-      background: 'linear-gradient(180deg, rgba(255,255,255,0.92), rgba(255,255,255,0.82))', borderBottom: `1px solid ${T.line}`,
-      height: 60, display: 'flex', alignItems: 'center', padding: '0 24px', gap: 4,
+      background: 'linear-gradient(180deg, rgba(255,255,255,0.94), rgba(255,249,252,0.88))', borderBottom: `1px solid ${T.line}`,
+      height: 68, display: 'flex', alignItems: 'center', padding: '0 24px', gap: 4,
       position: 'sticky', top: 0, zIndex: 100,
-      boxShadow: '0 10px 30px -24px rgba(91,47,176,0.40)',
+      boxShadow: '0 16px 34px -28px rgba(150,9,83,0.45)',
       backdropFilter: 'blur(14px)',
     }}>
       {/* Brand */}
@@ -398,11 +402,11 @@ function Navbar({ user, currentScreen, onGoToForm, onHistory, onSignOut }) {
           <button key={key} onClick={onClick} style={{
             background: active ? `${T.grape}0D` : 'transparent',
             color: active ? T.grape : T.soft,
-            border: 'none', borderRadius: 6,
-            padding: '6px 12px', fontSize: 13, fontWeight: 700,
-            transition: 'background .15s, color .15s',
+            border: active ? `1px solid rgba(150,9,83,0.12)` : '1px solid transparent', borderRadius: 999,
+            padding: '8px 14px', fontSize: 13, fontWeight: 800,
+            transition: 'background .15s, color .15s, border-color .15s',
           }}
-            onMouseEnter={e => { if (!active) e.currentTarget.style.background = '#EFECF5'; }}
+            onMouseEnter={e => { if (!active) e.currentTarget.style.background = '#FFF0F7'; }}
             onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent'; }}
           >{label}</button>
         );
@@ -417,10 +421,10 @@ function Navbar({ user, currentScreen, onGoToForm, onHistory, onSignOut }) {
         <div style={{ width: 1, height: 18, background: T.line, margin: '0 4px' }} />
         <button onClick={onSignOut} style={{
           background: 'transparent', border: `1px solid ${T.line}`,
-          color: T.soft, fontSize: 12, fontWeight: 700, padding: '5px 11px', borderRadius: 6,
+          color: T.soft, fontSize: 12, fontWeight: 800, padding: '8px 13px', borderRadius: 999,
           transition: 'background .15s',
         }}
-          onMouseEnter={e => { e.currentTarget.style.background = '#EFECF5'; }}
+          onMouseEnter={e => { e.currentTarget.style.background = '#FFF0F7'; }}
           onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
         >Sign out</button>
       </div>
@@ -457,22 +461,25 @@ function LoginScreen({ onLogin }) {
       minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
       background: T.pageBg, padding: 24,
     }}>
-      <div style={{ width: '100%', maxWidth: 420 }}>
+      <div style={{ width: '100%', maxWidth: 520 }}>
         {/* Brand header */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 28 }}>
-        <YogurtlandLogo size={56} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 20, padding: '18px 20px', borderRadius: 24, background: 'linear-gradient(135deg, rgba(150,9,83,0.92), rgba(195,25,113,0.88), rgba(141,198,63,0.65))', boxShadow: '0 24px 54px -34px rgba(150,9,83,0.75)' }}>
+        <YogurtlandLogo size={60} />
         <div>
-            <div style={{ fontSize: 16, fontWeight: 900, letterSpacing: -0.4 }}>YL MARKETING</div>
-            <div style={{ fontSize: 10, fontWeight: 700, color: T.muted, letterSpacing: 0.8, textTransform: 'uppercase', marginTop: 2 }}>FBC Check-In</div>
+            <div style={{ fontSize: 18, fontWeight: 900, letterSpacing: -0.4, color: '#fff' }}>YL MARKETING</div>
+            <div style={{ fontSize: 10, fontWeight: 800, color: 'rgba(255,255,255,0.76)', letterSpacing: 0.8, textTransform: 'uppercase', marginTop: 2 }}>FBC Check-In</div>
         </div>
       </div>
 
-        <Card style={{ padding: 32 }}>
-          <h1 style={{ fontSize: 22, fontWeight: 900, letterSpacing: -0.5, marginBottom: 4, background: `linear-gradient(135deg, ${T.pink}, ${T.grape})`, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-            Welcome back<span style={{ color: T.grape }}>.</span>
+        <Card style={{ padding: 36 }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderRadius: 999, background: '#FFF2F8', color: T.grape, fontSize: 11, fontWeight: 900, letterSpacing: 0.7, textTransform: 'uppercase', marginBottom: 18 }}>
+            Secure Sign-In
+          </div>
+          <h1 style={{ fontSize: 32, fontWeight: 900, letterSpacing: -1, marginBottom: 8, color: T.ink }}>
+            Welcome back
           </h1>
-          <p style={{ fontSize: 13, color: T.soft, marginBottom: 24, fontWeight: 600 }}>
-            Sign in to log a store visit.
+          <p style={{ fontSize: 14, color: T.soft, marginBottom: 24, fontWeight: 700, lineHeight: 1.6 }}>
+            Sign in to log store visits with the updated Yogurtland color palette.
           </p>
 
           <form onSubmit={handleSubmit}>
@@ -494,7 +501,7 @@ function LoginScreen({ onLogin }) {
               }
             />
             <div style={{ marginBottom: 24 }} />
-            <Btn type="submit" disabled={!canSubmit || loading} style={{ width: '100%', height: 42, borderRadius: 8, fontSize: 14 }}>
+            <Btn type="submit" disabled={!canSubmit || loading} style={{ width: '100%', height: 48, fontSize: 14 }}>
               {loading ? 'Signing in…' : <>
                 Sign in
                 <svg width="15" height="15" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
@@ -505,7 +512,7 @@ function LoginScreen({ onLogin }) {
           </form>
         </Card>
 
-        <p style={{ textAlign: 'center', fontSize: 11, color: T.muted, fontWeight: 600, marginTop: 16 }}>
+        <p style={{ textAlign: 'center', fontSize: 11, color: T.muted, fontWeight: 700, marginTop: 16 }}>
           Use your company email and password.
         </p>
       </div>
@@ -534,13 +541,13 @@ function WorkModePicker({ value, onChange, error }) {
               onClick={() => onChange(option.value)}
               style={{
                 height: 40,
-                borderRadius: 8,
+                borderRadius: 18,
                 border: `1.5px solid ${error ? T.error : active ? T.grape : T.line}`,
-                background: active ? `${T.grape}10` : T.white,
+                background: active ? 'linear-gradient(180deg, rgba(255,240,247,0.96), rgba(247,185,212,0.26))' : T.white,
                 color: active ? T.grape : T.ink,
                 fontSize: 13,
                 fontWeight: 800,
-                boxShadow: active ? `0 0 0 3px ${T.grape}12` : 'none',
+                boxShadow: active ? '0 12px 28px -20px rgba(150,9,83,0.45)' : 'none',
                 transition: 'border-color .15s, box-shadow .15s, background .15s',
               }}
             >
@@ -672,15 +679,18 @@ function VisitFormScreen({ user, token, storeOptions, onSubmit, onGoToForm, onHi
   return (
     <div style={{ minHeight: '100vh', background: T.pageBg }}>
       <Navbar user={user} currentScreen="form" onGoToForm={onGoToForm} onHistory={onHistory} onSignOut={onSignOut} />
-      <div style={{ maxWidth: 660, margin: '0 auto', padding: '36px 24px 56px' }}>
+      <div style={{ maxWidth: 760, margin: '0 auto', padding: '36px 24px 56px' }}>
         <div style={{ marginBottom: 24 }}>
-          <h1 style={{ fontSize: 22, fontWeight: 900, letterSpacing: -0.5, background: `linear-gradient(135deg, ${T.pink}, ${T.grape}, ${T.teal})`, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Log a store visit</h1>
-          <p style={{ fontSize: 13, color: T.soft, marginTop: 4, fontWeight: 600 }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderRadius: 999, background: '#FFF1F8', color: T.grape, fontSize: 11, fontWeight: 900, letterSpacing: 0.7, textTransform: 'uppercase', marginBottom: 12 }}>
+            Store Visit Form
+          </div>
+          <h1 style={{ fontSize: 30, fontWeight: 900, letterSpacing: -1, color: T.ink }}>Log a store visit</h1>
+          <p style={{ fontSize: 14, color: T.soft, marginTop: 8, fontWeight: 700, lineHeight: 1.6 }}>
             Fill this out when you arrive. Add end time when you leave.
           </p>
         </div>
 
-        <Card style={{ padding: 28 }}>
+        <Card style={{ padding: 30 }}>
           <form onSubmit={handleSubmit}>
             <WorkModePicker
               value={workMode}
@@ -759,8 +769,8 @@ function VisitFormScreen({ user, token, storeOptions, onSubmit, onGoToForm, onHi
             <div style={{
               marginBottom: 24,
               padding: '10px 12px',
-              borderRadius: 8,
-              background: gpsState.status === 'ready' ? 'linear-gradient(135deg, rgba(121,193,67,0.12), rgba(167,216,76,0.16))' : gpsState.status === 'error' ? `${T.error}10` : 'linear-gradient(135deg, rgba(242,77,136,0.08), rgba(155,18,101,0.08))',
+              borderRadius: 18,
+              background: gpsState.status === 'ready' ? 'linear-gradient(135deg, rgba(141,198,63,0.14), rgba(179,217,101,0.22))' : gpsState.status === 'error' ? `${T.error}10` : 'linear-gradient(135deg, rgba(247,185,212,0.16), rgba(150,9,83,0.08))',
               border: `1px solid ${errors.gps ? T.error : T.line}`,
             }}>
               <div style={{ fontSize: 12, fontWeight: 800, color: T.soft, letterSpacing: 0.4, textTransform: 'uppercase', marginBottom: 4 }}>
@@ -839,15 +849,15 @@ function SubmittedScreen({ visit, token, onCheckout, onNewVisit, onHistory, user
   return (
     <div style={{ minHeight: '100vh', background: T.pageBg }}>
       <Navbar user={user} currentScreen="form" onGoToForm={onGoToForm} onHistory={onHistory} onSignOut={onSignOut} />
-      <div style={{ maxWidth: 660, margin: '0 auto', padding: '36px 24px 56px' }}>
+      <div style={{ maxWidth: 760, margin: '0 auto', padding: '36px 24px 56px' }}>
         <Card style={{ padding: 32 }}>
           {/* Success header */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 28, paddingBottom: 24, borderBottom: `1px solid ${T.line}` }}>
             <div style={{
-              width: 48, height: 48, borderRadius: 12, flexShrink: 0,
-              background: `linear-gradient(135deg, ${T.pink}, ${T.grape})`,
+              width: 54, height: 54, borderRadius: 16, flexShrink: 0,
+              background: `linear-gradient(135deg, ${T.grape}, #C31971)`,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: `0 8px 20px -4px ${T.grape}40`,
+              boxShadow: '0 20px 30px -18px rgba(150,9,83,0.55)',
             }}>
               <svg width="24" height="24" viewBox="0 0 28 28" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M6 14l5 5 10-11"/>
@@ -896,8 +906,8 @@ function SubmittedScreen({ visit, token, onCheckout, onNewVisit, onHistory, user
           <div style={{
             marginBottom: 28,
             padding: 16,
-            borderRadius: 10,
-            background: 'linear-gradient(135deg, rgba(242,77,136,0.08), rgba(255,226,122,0.12), rgba(121,193,67,0.10))',
+            borderRadius: 18,
+            background: 'linear-gradient(135deg, rgba(247,185,212,0.16), rgba(255,240,166,0.24), rgba(141,198,63,0.16))',
             border: `1px solid ${T.line}`,
           }}>
             <div style={{ fontSize: 12, fontWeight: 800, color: T.soft, letterSpacing: 0.4, textTransform: 'uppercase', marginBottom: 10 }}>
@@ -992,11 +1002,14 @@ function MyVisitsScreen({ user, visits, filters, storeOptions, onFilterChange, o
   return (
     <div style={{ minHeight: '100vh', background: T.pageBg }}>
       <Navbar user={user} currentScreen="history" onGoToForm={onGoToForm} onHistory={onHistory} onSignOut={onSignOut} />
-      <div style={{ maxWidth: 740, margin: '0 auto', padding: '36px 24px 56px' }}>
+      <div style={{ maxWidth: 820, margin: '0 auto', padding: '36px 24px 56px' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24, gap: 16, flexWrap: 'wrap' }}>
           <div>
-            <h1 style={{ fontSize: 22, fontWeight: 900, letterSpacing: -0.5, background: `linear-gradient(135deg, ${T.pink}, ${T.grape}, ${T.teal})`, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>My Visits</h1>
-            <p style={{ fontSize: 13, color: T.soft, marginTop: 4, fontWeight: 600 }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderRadius: 999, background: '#FFF1F8', color: T.grape, fontSize: 11, fontWeight: 900, letterSpacing: 0.7, textTransform: 'uppercase', marginBottom: 12 }}>
+              Visit History
+            </div>
+            <h1 style={{ fontSize: 30, fontWeight: 900, letterSpacing: -1, color: T.ink }}>My Visits</h1>
+            <p style={{ fontSize: 14, color: T.soft, marginTop: 8, fontWeight: 700, lineHeight: 1.6 }}>
               {showingStoreDayResults
                 ? `${visits.length} visit${visits.length !== 1 ? 's' : ''} found for ${filters.storeId} on ${filters.visitDate}`
                 : `${visits.length} visit${visits.length !== 1 ? 's' : ''} logged`}
@@ -1010,7 +1023,7 @@ function MyVisitsScreen({ user, visits, filters, storeOptions, onFilterChange, o
           </Btn>
         </div>
 
-        <Card style={{ padding: 18, marginBottom: 16 }}>
+        <Card style={{ padding: 20, marginBottom: 16, background: T.panelSoft }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr auto auto', gap: 12, alignItems: 'end' }}>
             <Field
               label="Store"
@@ -1055,12 +1068,12 @@ function MyVisitsScreen({ user, visits, filters, storeOptions, onFilterChange, o
               return (
                 <Card key={v.id} style={{
                   padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 14,
-                  border: isActive ? `1.5px solid ${T.pink}50` : `1px solid ${T.line}`,
-                  boxShadow: isActive ? `0 2px 12px ${T.pink}14` : '0 1px 3px rgba(42,27,61,0.07)',
+                  border: isActive ? `1.5px solid rgba(150,9,83,0.28)` : `1px solid ${T.line}`,
+                  boxShadow: isActive ? '0 18px 30px -24px rgba(150,9,83,0.45)' : '0 12px 24px -24px rgba(52,20,38,0.35)',
                 }}>
                   <div style={{
                     width: 42, height: 42, borderRadius: 10, flexShrink: 0,
-                    background: isActive ? `linear-gradient(135deg, ${T.pink}, ${T.grape})` : `${color}12`,
+                    background: isActive ? `linear-gradient(135deg, ${T.grape}, #C31971)` : `${color}12`,
                     color: isActive ? '#fff' : color,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     fontSize: 11, fontWeight: 900, letterSpacing: -0.3,
